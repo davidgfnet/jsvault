@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <title>JS Vault - Encrypted secrets</title>
+
+    <style type="text/css">${ open("assets/bootstrap.min.css").read() }</style>
+    <style type="text/css">${ open("assets/form-validation.css").read() }</style>
+    
+    <script type="text/javascript">
+      var sealed_content = ${sealed_content};
+      var content_nonce = ${content_nonce};
+      var password_salt = ${password_salt};
+      var content_filename = "${content_filename}";
+
+      function a2e(a) {
+        for (var j = 0, r = ""; j < a.length; j++)
+          r += '%' + ("0" + a[j].toString(16)).slice(-2);
+        return r;
+      }
+      
+      function u2a(b) {
+        b = unescape(encodeURIComponent(b));
+        var r = [];
+        for (var i = 0; i < b.length; i++)
+          r.push(b.charCodeAt(i));
+        return r;
+      }
+      
+      function pad(num, size) {
+        var s = num+"";
+        while (s.length < size) s = "0" + s;
+        return s;
+      }
+
+      function calculatepass() {
+        // Calculate the password based on the form inputs
+        var pass = [];
+        % for i, q in enumerate(questions):
+          % if q["t"] == "text":
+            pass = pass.concat(u2a($("#answer${i}").val()));
+            pass.push(0);
+          % elif q["t"] == "choice":
+            pass = pass.concat(u2a(pad($("#answer${i}")[0].selectedIndex-1, 8)));
+            pass.push(0);
+          % elif q["t"] == "mchoice":
+            % for j, opt in enumerate(q["opts"]):
+              if ($("#answer${i}_opt${j}").prop("checked"))
+                pass.push(49);
+              else
+                pass.push(48);
+            % endfor
+            pass.push(0);
+          % endif
+        % endfor
+        return new Uint8Array(pass);
+      }
+    
+      function dowork() {
+        // Given the pasword, calculate now a hash
+        var pass = calculatepass();
+        var passhash = window.sodium.crypto_pwhash(
+          128, pass, password_salt,
+          window.sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+          2*1024*1024, window.sodium.crypto_pwhash_ALG_ARGON2ID13);
+        // Now proceed to unseal the secret bot using the hash as secret
+        var contents = window.sodium.crypto_secretbox_open_easy(
+          sealed_content,
+          content_nonce.slice(0, window.sodium.crypto_secretbox_NONCEBYTES),
+          passhash.slice(0, window.sodium.crypto_secretbox_KEYBYTES));
+
+        // Download the file
+        a = document.createElement('a');
+        document.body.appendChild(a);
+        a.download = content_filename;
+        a.href = 'data:application/octet-stream,' + a2e(contents);
+        a.click();
+      }
+    </script>
+  </head>
+
+  <body class="bg-light">
+
+    <div class="container">
+      <div class="py-5 text-center">
+        <h2>JS Vault</h2>
+        <p class="lead">${note}</p>
+      </div>
+
+      <div class="row">
+        <div class="col-md-12 order-md-1">
+          <h4 class="mb-3">Questions</h4>
+          <form class="needs-validation" novalidate>
+
+            % for i, q in enumerate(questions):
+            <div class="mb-3">
+              <label for="username">Question <b>#${str(i+1)}</b>: ${q["q"]}</label>
+              % if q["t"] == "text":
+                <input type="text" class="form-control" id="answer${str(i)}" placeholder="Answer" required>
+                % if "tip" in q:
+                  <small class="text-muted">${q["tip"]}</small>
+                % endif
+                <div class="invalid-feedback" style="width: 100%;">
+                  Please write an answer
+                </div>
+              % elif q["t"] == "choice":
+                <select class="custom-select d-block w-100" id="answer${str(i)}" required>
+                  <option value="">Choose...</option>
+                  % for opt in q["opts"]:
+                    <option>${opt}</option>
+                  % endfor
+                </select>
+                <div class="invalid-feedback">
+                  Please select an option.
+                </div>
+              % elif q["t"] == "mchoice":
+                <div class="row col-md-12">
+                  % for j, opt in enumerate(q["opts"]):
+                  <div class="custom-control custom-checkbox col-3">
+                    <input type="checkbox" class="custom-control-input" id="answer${str(i)}_opt${str(j)}">
+                    <label class="custom-control-label" for="answer${str(i)}_opt${str(j)}">${opt}</label>
+                  </div>
+                  % endfor
+                </div>
+              % endif
+            </div>
+            % endfor
+
+            <button class="btn btn-primary btn-lg btn-block" type="submit">Validate and Unlock</button>
+          </form>
+        </div>
+      </div>
+
+      <footer class="my-5 pt-5 text-muted text-center text-small">
+        <p class="mb-1">&copy; 2020 David Guillen Fandos</p>
+        <ul class="list-inline">
+          <li class="list-inline-item"><a href="https://github.com/davidgfnet/jsvault">Fork me at Github</a></li>
+          <li class="list-inline-item"><a href="https://davidgf.net">davidgf.net</a></li>
+        </ul>
+      </footer>
+    </div>
+
+    <script type="text/javascript">${ open("assets/sodium.js").read() }</script>
+    <script type="text/javascript">${ open("assets/jquery-3.5.1.min.js").read() }</script>
+    <script type="text/javascript">${ open("assets/bootstrap.min.js").read() }</script>
+
+    <script>
+      // Example starter JavaScript for disabling form submissions if there are invalid fields
+      (function() {
+        'use strict';
+
+        window.addEventListener('load', function() {
+          // Fetch all the forms we want to apply custom Bootstrap validation styles to
+          var forms = document.getElementsByClassName('needs-validation');
+
+          // Loop over them and prevent submission
+          var validation = Array.prototype.filter.call(forms, function(form) {
+            form.addEventListener('submit', function(event) {
+              if (form.checkValidity() === false) {
+                event.preventDefault();
+                event.stopPropagation();
+                form.classList.add('was-validated');
+                return;
+              }
+              form.classList.add('was-validated');
+              
+              try {
+                dowork();
+              } catch {
+                alert("The answers seem wrong, could not decrypt the data");
+              }
+              event.preventDefault();
+              event.stopPropagation();
+            }, false);
+          });
+        }, false);
+      })();
+    </script>
+  </body>
+</html>
+
