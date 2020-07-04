@@ -15,7 +15,7 @@ Do you want to store some secrets or sensible information that:
 JS Vault is just that: a tool that produces an HTML file (with no dependencies,
 so can be used offline) that has secrets embedded into it and can only be
 accessed if the user knows a series of secrets (in the form of answers to
-used defined questions).
+user defined questions).
 
 How does it work?
 -----------------
